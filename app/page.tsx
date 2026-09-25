@@ -561,11 +561,19 @@ export default function Home() {
   const [enemyPlayers, setEnemyPlayers] = useState(() => initialPlayers(2));
 
   useEffect(() => {
-    const savedLanguage = localStorage.getItem("fomo-language");
-    if (savedLanguage === "es" || savedLanguage === "en" || savedLanguage === "ru") {
-      setLanguage(savedLanguage);
-    }
-    setIsMounted(true);
+    const restoreLanguage = () => {
+      const savedLanguage = localStorage.getItem("fomo-language");
+      if (savedLanguage === "es" || savedLanguage === "en" || savedLanguage === "ru") {
+        setLanguage(savedLanguage);
+      }
+      setIsMounted(true);
+    };
+
+    const timeoutId = window.setTimeout(restoreLanguage, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
   }, []);
 
   useEffect(() => {
@@ -627,7 +635,7 @@ export default function Home() {
                   gap: 6,
                   border: "none",
                   borderRadius: 999,
-                  background: language === option ? "rgba(255,255,255,0.14)" : "transparent",
+                  background: language === option ? "#e7773b" : "transparent",
                   color: "#f3efe9",
                   cursor: "pointer",
                   padding: "6px 10px",
