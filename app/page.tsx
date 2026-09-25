@@ -7,8 +7,7 @@ type Language = "es" | "en" | "ru";
 
 type Player = {
   id: number;
-  power: string;
-  race: Race;
+  powerByRace: Record<Race, string>;
 };
 
 type ClanStats = {
@@ -245,7 +244,7 @@ const translations: Record<Language, Labels> = {
 };
 
 const initialPlayers = (id: number): Player[] => [
-  { id, power: "", race: "Demonios" },
+  { id, powerByRace: { Demonios: "", Humanos: "", Elfos: "" } },
 ];
 
 const formatNumber = (value: number, digits = 0, language: Language = "es") =>
@@ -269,9 +268,13 @@ function calculateStats(players: Player[]): ClanStats {
   };
 
   players.forEach((player) => {
-    const power = Number(player.power) || 0;
-    powerByRace[player.race] += Math.max(power, 0);
-    counts[player.race] += 1;
+    races.forEach((race) => {
+      const power = Number(player.powerByRace[race]) || 0;
+      powerByRace[race] += Math.max(power, 0);
+      if (power > 0) {
+        counts[race] += 1;
+      }
+    });
   });
 
   const troopsByRace = {
@@ -339,22 +342,27 @@ function ClanPanel({
   language: Language;
 }) {
   const [isBattleOrderOpen, setIsBattleOrderOpen] = useState(true);
+  const nextPlayerId = useRef(3);
   const stats = calculateStats(players);
 
   const addPlayer = () => {
     onPlayersChange([
       ...players,
-      { id: Date.now(), power: "", race: "Demonios" },
+      { id: nextPlayerId.current++, powerByRace: { Demonios: "", Humanos: "", Elfos: "" } },
     ]);
   };
 
-  const updatePlayer = (id: number, changes: Partial<Player>) => {
-    onPlayersChange(players.map((player) => (player.id === id ? { ...player, ...changes } : player)));
+  const updatePlayerPower = (id: number, race: Race, power: string) => {
+    onPlayersChange(players.map((player) => (
+      player.id === id
+        ? { ...player, powerByRace: { ...player.powerByRace, [race]: power } }
+        : player
+    )));
   };
 
   const removePlayer = (id: number) => {
     if (players.length === 1) {
-      onPlayersChange(initialPlayers(Date.now()));
+      onPlayersChange(initialPlayers(players[0].id));
       return;
     }
     onPlayersChange(players.filter((player) => player.id !== id));
@@ -397,8 +405,9 @@ function ClanPanel({
           <thead>
             <tr>
               <th>#</th>
-              <th>{labels.playerPower}</th>
-              <th>{labels.raceLabel}</th>
+              {races.map((race) => (
+                <th key={race}>{getRaceName(race, language)}</th>
+              ))}
               <th aria-label={labels.removePlayer} />
             </tr>
           </thead>
@@ -406,32 +415,20 @@ function ClanPanel({
             {players.map((player, index) => (
               <tr key={player.id}>
                 <td className="row-number">{String(index + 1).padStart(2, "0")}</td>
-                <td>
-                  <input
-                    className="power-input"
-                    type="number"
-                    min="0"
-                    step="any"
-                    value={player.power}
-                    onChange={(event) => updatePlayer(player.id, { power: event.target.value })}
-                    placeholder="0"
-                    aria-label={`${labels.playerPower} ${index + 1}`}
-                  />
-                </td>
-                <td>
-                  <select
-                    className={`race-select race-${player.race.toLowerCase()}`}
-                    value={player.race}
-                    onChange={(event) => updatePlayer(player.id, { race: event.target.value as Race })}
-                    aria-label={`${labels.raceLabel} ${index + 1}`}
-                  >
-                    {races.map((race) => (
-                      <option key={race} value={race}>
-                        {getRaceName(race, language)}
-                      </option>
-                    ))}
-                  </select>
-                </td>
+                {races.map((race) => (
+                  <td key={race}>
+                    <input
+                      className={`power-input race-${race.toLowerCase()}`}
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={player.powerByRace[race]}
+                      onChange={(event) => updatePlayerPower(player.id, race, event.target.value)}
+                      placeholder="0"
+                      aria-label={`${getRaceName(race, language)} · ${labels.playerPower} ${index + 1}`}
+                    />
+                  </td>
+                ))}
                 <td>
                   <button className="remove-button" type="button" onClick={() => removePlayer(player.id)} aria-label={`${labels.removePlayer} ${index + 1}`}>
                     ×
