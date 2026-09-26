@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 type Race = "Demonios" | "Humanos" | "Elfos";
@@ -610,6 +611,7 @@ export default function Home() {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <Link className="account-link" href="/cuenta">Mi cuenta</Link>
           <label htmlFor="language-select" style={{ fontSize: 12, letterSpacing: "0.08em", textTransform: "uppercase" }}>
             {labels.languageLabel}
           </label>

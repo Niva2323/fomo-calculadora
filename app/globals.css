@@ -24,6 +24,7 @@ button { cursor: pointer; }
 .brand em { color: var(--orange); font-style: normal; font-size: 9px; margin-left: 4px; letter-spacing: .22em; }
 .brand-mark { display: grid; place-items: center; width: 27px; height: 27px; border: 1px solid var(--orange); color: var(--orange); border-radius: 50%; font-size: 13px; }
 .live-state { color: var(--muted); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
+.account-link { color: var(--orange); font-size: 11px; font-weight: 800; text-decoration: none; }.account-link:hover { color: var(--ink); }
 .live-state i { display: inline-block; width: 7px; height: 7px; background: var(--green); border-radius: 50%; margin-right: 7px; }
 .hero { display: flex; justify-content: space-between; align-items: end; padding: 76px 0 67px; }
 .eyebrow, .section-label, .table-kicker { color: var(--orange); font-size: 10px; font-weight: 800; letter-spacing: .18em; text-transform: uppercase; margin: 0 0 16px; }

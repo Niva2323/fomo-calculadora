@@ -20,6 +20,18 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Authentication setup
+
+Authentication uses Supabase Auth for email/password accounts and Google OAuth.
+
+1. Create a Supabase project and copy `.env.example` to `.env.local`.
+2. Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and `NEXT_PUBLIC_SITE_URL` from your Supabase project and local URL. Legacy `anon` keys are also accepted through `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+3. In Supabase Authentication settings, set the Site URL and add `http://localhost:3000/auth/callback` to the allowed redirect URLs. Add your production callback URL before deploying.
+4. To enable Google, create OAuth credentials in Google Cloud, enable Google in Supabase Authentication providers, and add the Supabase callback URL shown there to the Google OAuth client. Keep the Google client secret in Supabase, never in this app.
+5. Run `npm run dev` and open `/registro` to create an account. Email confirmation follows the Supabase project's email settings.
+
+The `/cuenta` page requires a valid Supabase session. The clan calculator remains available without signing in.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
