@@ -107,7 +107,7 @@ const translations: Record<Language, Labels> = {
     clanNamePlaceholder: "Escribe un nombre",
     battleOrder: "Orden de batalla",
     playersLabel: "jugadores",
-    addPlayer: "Añadir jugador",
+    addPlayer: "Añadir fila",
     playerPower: "Poder del jugador",
     raceLabel: "Raza",
     removePlayer: "Eliminar jugador",
@@ -167,7 +167,7 @@ const translations: Record<Language, Labels> = {
     clanNamePlaceholder: "Write a name",
     battleOrder: "Battle order",
     playersLabel: "players",
-    addPlayer: "Add player",
+    addPlayer: "Add row",
     playerPower: "Player power",
     raceLabel: "Race",
     removePlayer: "Remove player",
@@ -227,7 +227,7 @@ const translations: Record<Language, Labels> = {
     clanNamePlaceholder: "Напишите имя",
     battleOrder: "Порядок боя",
     playersLabel: "игроков",
-    addPlayer: "Добавить игрока",
+    addPlayer: "Добавить строку",
     playerPower: "Сила игрока",
     raceLabel: "Раса",
     removePlayer: "Удалить игрока",
@@ -470,7 +470,7 @@ function ClanPanel({
           aria-expanded={isBattleOrderOpen}
           aria-controls={`${eyebrow}-players`}
         >
-          <span><span className="table-kicker">{labels.battleOrder}</span><strong>{players.length} {labels.playersLabel}</strong></span>
+          <span><span className="table-kicker">{labels.battleOrder}</span><strong>{Object.values(stats.counts).reduce((total, count) => total + count, 0)} {labels.playersLabel}</strong></span>
           <span className={`toggle-chevron ${isBattleOrderOpen ? "is-open" : ""}`} aria-hidden="true">⌄</span>
         </button>
         {isBattleOrderOpen && <button className="add-button" type="button" onClick={addPlayer}>+ {labels.addPlayer}</button>}
@@ -740,8 +740,6 @@ export default function Home() {
         labels.attackStat,
         labels.defenseStat,
         labels.attackPercentStat,
-        ...races.map((race) => getRaceName(race, language)),
-        labels.powerStat,
       ],
       [
         stats.players,
@@ -749,6 +747,14 @@ export default function Home() {
         stats.attack,
         stats.defense,
         stats.attackPercent,
+      ],
+      [
+        "",
+        ...races.map((race) => getRaceName(race, language)),
+        labels.powerStat,
+      ],
+      [
+        "",
         ...races.map((race) => stats.counts[race]),
         stats.power,
       ],
@@ -912,12 +918,16 @@ export default function Home() {
 
     const generalHeaderRow = columnHeaderRows[1];
     const generalValueRow = generalHeaderRow + 1;
+    const raceHeaderRow = generalHeaderRow + 2;
+    const raceValueRow = generalHeaderRow + 3;
     [1, 11].forEach((column) => setCellStyle(generalValueRow, column, valueStyle(colors.orange)));
     [2, 12].forEach((column) => setCellStyle(generalValueRow, column, valueStyle(colors.red)));
     [3, 13].forEach((column) => setCellStyle(generalValueRow, column, valueStyle(colors.blue)));
     [4, 14].forEach((column) => setCellStyle(generalValueRow, column, valueStyle(colors.green)));
-    [[5, colors.red], [6, colors.blue], [7, colors.green], [15, colors.red], [16, colors.blue], [17, colors.green]]
-      .forEach(([column, color]) => setCellStyle(generalValueRow, Number(column), valueStyle(String(color))));
+    setRangeStyle(raceHeaderRow, 1, 4, headerStyle);
+    setRangeStyle(raceHeaderRow, 11, 14, headerStyle);
+    [[1, colors.red], [2, colors.blue], [3, colors.green], [4, colors.orange], [11, colors.red], [12, colors.blue], [13, colors.green], [14, colors.orange]]
+      .forEach(([column, color]) => setCellStyle(raceValueRow, Number(column), valueStyle(String(color))));
 
     const consolidatedHeaderRow = columnHeaderRows[2];
     [consolidatedHeaderRow + 1, consolidatedHeaderRow + 2, consolidatedHeaderRow + 3].forEach((row, index) => {
