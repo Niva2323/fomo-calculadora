@@ -724,23 +724,34 @@ export default function Home() {
   };
 
   const exportXls = async () => {
-    const XLSX = await import("xlsx");
+    const XLSX = await import("xlsx-js-style");
     const pairedRows = (leftRows: ExportRows, rightRows: ExportRows) => {
       const rowCount = Math.max(leftRows.length, rightRows.length);
       return Array.from({ length: rowCount }, (_, index) => [
         ...(leftRows[index] ?? []),
-        "",
+        ...Array.from({ length: 10 - (leftRows[index]?.length ?? 0) }, () => ""),
         ...(rightRows[index] ?? []),
       ]);
     };
     const generalRows = (stats: ClanStats): ExportRows => [
-      [labels.playersStat, stats.players],
-      [labels.strengthStat, stats.strength],
-      [labels.attackStat, stats.attack],
-      [labels.defenseStat, stats.defense],
-      [labels.attackPercentStat, stats.attackPercent],
-      ...races.map((race) => [getRaceName(race, language), stats.counts[race]]),
-      [labels.powerStat, stats.power],
+      [
+        labels.playersStat,
+        labels.strengthStat,
+        labels.attackStat,
+        labels.defenseStat,
+        labels.attackPercentStat,
+        ...races.map((race) => getRaceName(race, language)),
+        labels.powerStat,
+      ],
+      [
+        stats.players,
+        stats.strength,
+        stats.attack,
+        stats.defense,
+        stats.attackPercent,
+        ...races.map((race) => stats.counts[race]),
+        stats.power,
+      ],
     ];
     const consolidatedRows = (stats: ClanStats): ExportRows => [
       [labels.raceLabel, labels.powerStat, labels.troopsStat, labels.attackStat, labels.defenseStat],
@@ -752,50 +763,175 @@ export default function Home() {
         stats.defenseByRace[race],
       ]),
     ];
-    const rows: ExportRows = [
-      [labels.offensive, "", "", "", "", "", labels.defensive],
-      [labels.yourClan, userName, "", "", "", "", labels.enemyClan, enemyName],
-      [getSectionTitle("battle", labels), "", "", "", "", "", getSectionTitle("battle", labels)],
-      ...pairedRows(
-        [
-          [labels.clanName, "#", ...races.map((race) => getRaceName(race, language))],
-          ...userPlayers.map((player, index) => [
-            labels.yourClan,
-            index + 1,
-            ...races.map((race) => Number(player.powerByRace[race]) || 0),
-          ]),
-        ],
-        [
-          [labels.clanName, "#", ...races.map((race) => getRaceName(race, language))],
-          ...enemyPlayers.map((player, index) => [
-            labels.enemyClan,
-            index + 1,
-            ...races.map((race) => Number(player.powerByRace[race]) || 0),
-          ]),
-        ],
-      ),
-      [],
-      [getSectionTitle("general", labels), "", "", "", "", "", getSectionTitle("general", labels)],
-      ...pairedRows(generalRows(userStats), generalRows(enemyStats)),
-      [],
-      [getSectionTitle("consolidated", labels), "", "", "", "", "", getSectionTitle("consolidated", labels)],
-      ...pairedRows(consolidatedRows(userStats), consolidatedRows(enemyStats)),
-      [],
-      [getSectionTitle("tactical", labels)],
+    const rows: ExportRows = [];
+    const sectionTitleRows: { row: number; rightStart: number; width: number }[] = [];
+    const columnHeaderRows: number[] = [];
+    const mergeRanges: { s: { r: number; c: number }; e: { r: number; c: number } }[] = [];
+    const addPairedSection = (
+      title: string,
+      leftRows: ExportRows,
+      rightRows: ExportRows,
+      rightStart: number,
+      width: number,
+    ) => {
+      const titleRow = rows.length;
+      const titleCells = Array.from({ length: rightStart + width }, () => "");
+      titleCells[0] = title;
+      titleCells[rightStart] = title;
+      rows.push(titleCells);
+      sectionTitleRows.push({ row: titleRow, rightStart, width });
+      mergeRanges.push(
+        { s: { r: titleRow, c: 0 }, e: { r: titleRow, c: width - 1 } },
+        { s: { r: titleRow, c: rightStart }, e: { r: titleRow, c: rightStart + width - 1 } },
+      );
+
+      columnHeaderRows.push(rows.length);
+      rows.push(...pairedRows(leftRows, rightRows));
+      rows.push([]);
+    };
+    const heading = Array.from({ length: 19 }, () => "");
+    heading[0] = labels.offensive;
+    heading[10] = labels.defensive;
+    const clanNames = Array.from({ length: 19 }, () => "");
+    clanNames[0] = labels.yourClan;
+    clanNames[1] = userName;
+    clanNames[10] = labels.enemyClan;
+    clanNames[11] = enemyName;
+    rows.push(heading, clanNames);
+    mergeRanges.push(
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 8 } },
+      { s: { r: 0, c: 10 }, e: { r: 0, c: 18 } },
+    );
+
+    addPairedSection(
+      getSectionTitle("battle", labels),
+      [
+        [labels.clanName, "#", ...races.map((race) => getRaceName(race, language))],
+        ...userPlayers.map((player, index) => [
+          labels.yourClan,
+          index + 1,
+          ...races.map((race) => Number(player.powerByRace[race]) || 0),
+        ]),
+      ],
+      [
+        [labels.clanName, "#", ...races.map((race) => getRaceName(race, language))],
+        ...enemyPlayers.map((player, index) => [
+          labels.enemyClan,
+          index + 1,
+          ...races.map((race) => Number(player.powerByRace[race]) || 0),
+        ]),
+      ],
+      10,
+      9,
+    );
+    addPairedSection(getSectionTitle("general", labels), generalRows(userStats), generalRows(enemyStats), 10, 9);
+    addPairedSection(getSectionTitle("consolidated", labels), consolidatedRows(userStats), consolidatedRows(enemyStats), 10, 9);
+
+    const tacticalTitleRow = rows.length;
+    rows.push([getSectionTitle("tactical", labels)]);
+    mergeRanges.push({ s: { r: tacticalTitleRow, c: 0 }, e: { r: tacticalTitleRow, c: 5 } });
+    columnHeaderRows.push(rows.length);
+    rows.push(
       [labels.tacticalReading, labels.offensive, labels.attackStat, labels.defensive, labels.defenseStat, labels.matchupForecast],
       [labels.attackPhase, userName, userStats.attack, enemyName, enemyStats.defense, userStats.attack > enemyStats.defense ? labels.attackVictory : labels.attackDefeat],
       [labels.defensePhase, userName, userStats.defense, enemyName, enemyStats.attack, userStats.defense > enemyStats.attack ? labels.defenseVictory : labels.defenseDefeat],
-    ];
+    );
+
     const workbook = XLSX.utils.book_new();
     const worksheet = XLSX.utils.aoa_to_sheet(rows);
-    worksheet["!cols"] = [
-      { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 3 },
-      { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 },
-    ];
-    worksheet["!merges"] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } },
-      { s: { r: 0, c: 6 }, e: { r: 0, c: 10 } },
-    ];
+    worksheet["!cols"] = Array.from({ length: 19 }, (_, column) => ({
+      wch: column === 9 ? 3 : column === 0 || column === 10 ? 20 : column < 9 ? 13 : 14,
+    }));
+    worksheet["!merges"] = mergeRanges;
+    const colors = {
+      ink: "18211F",
+      muted: "73817C",
+      paper: "F2EFE8",
+      panel: "FBFAF7",
+      line: "D9D8D0",
+      orange: "E7773B",
+      red: "B81F14",
+      blue: "1869A3",
+      green: "04AC4A",
+    };
+    const setCellStyle = (row: number, column: number, style: Record<string, unknown>) => {
+      const address = XLSX.utils.encode_cell({ r: row, c: column });
+      if (worksheet[address]) {
+        worksheet[address].s = style;
+      }
+    };
+    const setRangeStyle = (row: number, start: number, end: number, style: Record<string, unknown>) => {
+      for (let column = start; column <= end; column += 1) {
+        setCellStyle(row, column, style);
+      }
+    };
+    const sectionStyle = {
+      font: { bold: true, color: { rgb: colors.muted } },
+      border: { bottom: { style: "thin", color: { rgb: colors.line } } },
+    };
+    const headerStyle = {
+      fill: { patternType: "solid", fgColor: { rgb: colors.paper } },
+      font: { bold: true, color: { rgb: colors.muted } },
+      alignment: { vertical: "center", wrapText: true },
+      border: { bottom: { style: "thin", color: { rgb: colors.line } } },
+    };
+    const valueStyle = (color: string) => ({ font: { color: { rgb: color }, bold: true } });
+
+    setRangeStyle(0, 0, 8, {
+      fill: { patternType: "solid", fgColor: { rgb: colors.paper } },
+      font: { bold: true, color: { rgb: colors.orange } },
+    });
+    setRangeStyle(0, 10, 18, {
+      fill: { patternType: "solid", fgColor: { rgb: colors.paper } },
+      font: { bold: true, color: { rgb: colors.orange } },
+    });
+    [0, 10].forEach((column) => setCellStyle(1, column, { font: { bold: true, color: { rgb: colors.ink } } }));
+    [1, 11].forEach((column) => setCellStyle(1, column, { font: { color: { rgb: colors.ink } } }));
+    sectionTitleRows.forEach(({ row, rightStart, width }) => {
+      setRangeStyle(row, 0, width - 1, sectionStyle);
+      setRangeStyle(row, rightStart, rightStart + width - 1, sectionStyle);
+    });
+    setRangeStyle(tacticalTitleRow, 0, 5, sectionStyle);
+    columnHeaderRows.forEach((row) => {
+      const section = sectionTitleRows.find((item) => item.row + 1 === row);
+      if (section) {
+        setRangeStyle(row, 0, section.width - 1, headerStyle);
+        setRangeStyle(row, section.rightStart, section.rightStart + section.width - 1, headerStyle);
+      } else {
+        setRangeStyle(row, 0, 5, headerStyle);
+      }
+    });
+
+    const battleDataStart = columnHeaderRows[0] + 1;
+    const battleDataEnd = battleDataStart + Math.max(userPlayers.length, enemyPlayers.length);
+    for (let row = battleDataStart; row < battleDataEnd; row += 1) {
+      [2, 12].forEach((column) => setCellStyle(row, column, valueStyle(colors.red)));
+      [3, 13].forEach((column) => setCellStyle(row, column, valueStyle(colors.blue)));
+      [4, 14].forEach((column) => setCellStyle(row, column, valueStyle(colors.green)));
+    }
+
+    const generalHeaderRow = columnHeaderRows[1];
+    const generalValueRow = generalHeaderRow + 1;
+    [1, 11].forEach((column) => setCellStyle(generalValueRow, column, valueStyle(colors.orange)));
+    [2, 12].forEach((column) => setCellStyle(generalValueRow, column, valueStyle(colors.red)));
+    [3, 13].forEach((column) => setCellStyle(generalValueRow, column, valueStyle(colors.blue)));
+    [4, 14].forEach((column) => setCellStyle(generalValueRow, column, valueStyle(colors.green)));
+    [[5, colors.red], [6, colors.blue], [7, colors.green], [15, colors.red], [16, colors.blue], [17, colors.green]]
+      .forEach(([column, color]) => setCellStyle(generalValueRow, Number(column), valueStyle(String(color))));
+
+    const consolidatedHeaderRow = columnHeaderRows[2];
+    [consolidatedHeaderRow + 1, consolidatedHeaderRow + 2, consolidatedHeaderRow + 3].forEach((row, index) => {
+      const raceColor = [colors.red, colors.blue, colors.green][index];
+      setCellStyle(row, 0, valueStyle(raceColor));
+      setCellStyle(row, 10, valueStyle(raceColor));
+    });
+
+    rows.slice(tacticalTitleRow + 2).forEach((row, index) => {
+      const outcome = String(row[5] ?? "");
+      const color = outcome === labels.attackVictory || outcome === labels.defenseVictory ? colors.green : colors.red;
+      setCellStyle(tacticalTitleRow + 2 + index, 5, valueStyle(color));
+    });
+
     XLSX.utils.book_append_sheet(workbook, worksheet, "Comparativa");
     const file = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
     downloadFile("fomo-war-room.xlsx", file, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -853,7 +989,7 @@ export default function Home() {
       battleRows.forEach((row, index) => {
         const sideColumns = [
           { sideColumn: 0, powerColumn: 2 },
-          { sideColumn: 6, powerColumn: 8 },
+          { sideColumn: 10, powerColumn: 12 },
         ];
         sideColumns.forEach(({ sideColumn, powerColumn }) => {
           const side = names.get(cellText(row[sideColumn]));
