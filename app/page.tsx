@@ -65,6 +65,12 @@ type Labels = {
   defenseDefeat: string;
   metricsFooter: string;
   formulaUpdate: string;
+  dataActions: string;
+  importData: string;
+  exportXls: string;
+  exportCsv: string;
+  importSuccess: string;
+  importError: string;
   raceNames: Record<Race, string>;
   defaultClanNames: {
     user: string;
@@ -124,6 +130,12 @@ const translations: Record<Language, Labels> = {
     defenseDefeat: "Derrota al Defender",
     metricsFooter: "FOMO WAR ROOM",
     formulaUpdate: "Las fórmulas se actualizan con cada cambio",
+    dataActions: "Datos",
+    importData: "Importar",
+    exportXls: "Exportar XLS",
+    exportCsv: "Exportar CSV",
+    importSuccess: "Datos importados correctamente",
+    importError: "No se pudo leer el archivo. Usa un XLS o CSV exportado desde esta herramienta.",
     raceNames: {
       Demonios: "Demonios",
       Humanos: "Humanos",
@@ -178,6 +190,12 @@ const translations: Record<Language, Labels> = {
     defenseDefeat: "Defense defeat",
     metricsFooter: "FOMO WAR ROOM",
     formulaUpdate: "The formulas update with every change",
+    dataActions: "Data",
+    importData: "Import",
+    exportXls: "Export XLS",
+    exportCsv: "Export CSV",
+    importSuccess: "Data imported successfully",
+    importError: "Could not read the file. Use an XLS or CSV exported from this tool.",
     raceNames: {
       Demonios: "Demons",
       Humanos: "Humans",
@@ -232,6 +250,12 @@ const translations: Record<Language, Labels> = {
     defenseDefeat: "Поражение в защите",
     metricsFooter: "FOMO WAR ROOM",
     formulaUpdate: "Формулы обновляются при каждом изменении",
+    dataActions: "Данные",
+    importData: "Импорт",
+    exportXls: "Экспорт XLS",
+    exportCsv: "Экспорт CSV",
+    importSuccess: "Данные успешно импортированы",
+    importError: "Не удалось прочитать файл. Используйте XLS или CSV из этого инструмента.",
     raceNames: {
       Demonios: "Демоны",
       Humanos: "Люди",
@@ -255,6 +279,54 @@ const formatNumber = (value: number, digits = 0, language: Language = "es") =>
   }).format(value);
 
 const getRaceName = (race: Race, language: Language) => translations[language].raceNames[race];
+
+const exportSections = ["clans", "battle", "general", "consolidated", "tactical"] as const;
+type ExportSection = (typeof exportSections)[number];
+
+type ExportRows = (string | number)[][];
+
+function getSectionTitle(section: ExportSection, labels: Labels) {
+  const sectionLabels: Record<ExportSection, string> = {
+    clans: labels.clanName,
+    battle: labels.battleOrder,
+    general: labels.generalData,
+    consolidated: labels.consolidatedData,
+    tactical: labels.tacticalReading,
+  };
+  return sectionLabels[section];
+}
+
+function getSectionRows(rows: unknown[][], section: ExportSection) {
+  const knownTitles = Object.values(translations).map((labels) => getSectionTitle(section, labels));
+  const sectionIndex = rows.findIndex((row) => knownTitles.includes(cellText(row[0])));
+  if (sectionIndex < 0) {
+    return [];
+  }
+
+  const headerIndex = sectionIndex + 1;
+  const dataRows: unknown[][] = [];
+  for (let index = headerIndex + 1; index < rows.length; index += 1) {
+    const row = rows[index];
+    if (!row || row.every((cell) => cell === undefined || cell === null || cell === "")) {
+      break;
+    }
+    dataRows.push(row);
+  }
+  return dataRows;
+}
+
+function cellText(value: unknown) {
+  return value === undefined || value === null ? "" : String(value);
+}
+
+function downloadFile(filename: string, content: BlobPart, mimeType: string) {
+  const url = URL.createObjectURL(new Blob([content], { type: mimeType }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
 
 function calculateStats(players: Player[]): ClanStats {
   const powerByRace: Record<Race, number> = {
@@ -347,9 +419,11 @@ function ClanPanel({
   const stats = calculateStats(players);
 
   const addPlayer = () => {
+    const id = Math.max(nextPlayerId.current, ...players.map((player) => player.id + 1));
+    nextPlayerId.current = id + 1;
     onPlayersChange([
       ...players,
-      { id: nextPlayerId.current++, powerByRace: { Demonios: "", Humanos: "", Elfos: "" } },
+      { id, powerByRace: { Demonios: "", Humanos: "", Elfos: "" } },
     ]);
   };
 
@@ -557,6 +631,8 @@ export default function Home() {
   const [enemyName, setEnemyName] = useState(labels.defaultClanNames.enemy);
   const [userPlayers, setUserPlayers] = useState(() => initialPlayers(1));
   const [enemyPlayers, setEnemyPlayers] = useState(() => initialPlayers(2));
+  const [dataMessage, setDataMessage] = useState("");
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const restoreLanguage = () => {
@@ -602,6 +678,208 @@ export default function Home() {
   const userStats = calculateStats(userPlayers);
   const enemyStats = calculateStats(enemyPlayers);
 
+  const createExportTables = (): Record<ExportSection, ExportRows> => {
+    const clanRows = [
+      [labels.yourClan, userName],
+      [labels.enemyClan, enemyName],
+    ];
+    const battleRows = [
+      ...userPlayers.map((player, index) => [labels.yourClan, index + 1, ...races.map((race) => Number(player.powerByRace[race]) || 0)]),
+      ...enemyPlayers.map((player, index) => [labels.enemyClan, index + 1, ...races.map((race) => Number(player.powerByRace[race]) || 0)]),
+    ];
+    const statsByClan: [string, ClanStats][] = [
+      [labels.yourClan, userStats],
+      [labels.enemyClan, enemyStats],
+    ];
+    const generalRows = statsByClan.map(([clan, stats]) => [
+        clan,
+        stats.players,
+        stats.strength,
+        stats.attack,
+        stats.defense,
+        stats.attackPercent,
+        ...races.map((race) => stats.counts[race]),
+        stats.power,
+      ]);
+    const consolidatedRows = statsByClan.flatMap(([clan, stats]) => races.map((race) => [
+        clan,
+        getRaceName(race, language),
+        stats.powerByRace[race],
+        stats.troopsByRace[race],
+        stats.attackByRace[race],
+        stats.defenseByRace[race],
+      ]));
+    const tacticalRows = [
+      [labels.attackPhase, userName, enemyName, userStats.attack, enemyStats.defense, userStats.attack > enemyStats.defense ? labels.attackVictory : labels.attackDefeat],
+      [labels.defensePhase, userName, enemyName, userStats.defense, enemyStats.attack, userStats.defense > enemyStats.attack ? labels.defenseVictory : labels.defenseDefeat],
+    ];
+
+    return {
+      clans: [[getSectionTitle("clans", labels)], [labels.clanName, "Nombre"], ...clanRows],
+      battle: [[getSectionTitle("battle", labels)], [labels.clanName, "#", ...races.map((race) => getRaceName(race, language))], ...battleRows],
+      general: [[getSectionTitle("general", labels)], [labels.clanName, labels.playersStat, labels.strengthStat, labels.attackStat, labels.defenseStat, labels.attackPercentStat, ...races.map((race) => getRaceName(race, language)), labels.powerStat], ...generalRows],
+      consolidated: [[getSectionTitle("consolidated", labels)], [labels.clanName, labels.raceLabel, labels.powerStat, labels.troopsStat, labels.attackStat, labels.defenseStat], ...consolidatedRows],
+      tactical: [[getSectionTitle("tactical", labels)], [labels.tacticalReading, labels.yourClan, labels.enemyClan, labels.attackStat, labels.defenseStat, labels.matchupForecast], ...tacticalRows],
+    };
+  };
+
+  const exportXls = async () => {
+    const XLSX = await import("xlsx");
+    const pairedRows = (leftRows: ExportRows, rightRows: ExportRows) => {
+      const rowCount = Math.max(leftRows.length, rightRows.length);
+      return Array.from({ length: rowCount }, (_, index) => [
+        ...(leftRows[index] ?? []),
+        "",
+        ...(rightRows[index] ?? []),
+      ]);
+    };
+    const generalRows = (stats: ClanStats): ExportRows => [
+      [labels.playersStat, stats.players],
+      [labels.strengthStat, stats.strength],
+      [labels.attackStat, stats.attack],
+      [labels.defenseStat, stats.defense],
+      [labels.attackPercentStat, stats.attackPercent],
+      ...races.map((race) => [getRaceName(race, language), stats.counts[race]]),
+      [labels.powerStat, stats.power],
+    ];
+    const consolidatedRows = (stats: ClanStats): ExportRows => [
+      [labels.raceLabel, labels.powerStat, labels.troopsStat, labels.attackStat, labels.defenseStat],
+      ...races.map((race) => [
+        getRaceName(race, language),
+        stats.powerByRace[race],
+        stats.troopsByRace[race],
+        stats.attackByRace[race],
+        stats.defenseByRace[race],
+      ]),
+    ];
+    const rows: ExportRows = [
+      [labels.offensive, "", "", "", "", "", labels.defensive],
+      [labels.yourClan, userName, "", "", "", "", labels.enemyClan, enemyName],
+      [getSectionTitle("battle", labels), "", "", "", "", "", getSectionTitle("battle", labels)],
+      ...pairedRows(
+        [
+          [labels.clanName, "#", ...races.map((race) => getRaceName(race, language))],
+          ...userPlayers.map((player, index) => [
+            labels.yourClan,
+            index + 1,
+            ...races.map((race) => Number(player.powerByRace[race]) || 0),
+          ]),
+        ],
+        [
+          [labels.clanName, "#", ...races.map((race) => getRaceName(race, language))],
+          ...enemyPlayers.map((player, index) => [
+            labels.enemyClan,
+            index + 1,
+            ...races.map((race) => Number(player.powerByRace[race]) || 0),
+          ]),
+        ],
+      ),
+      [],
+      [getSectionTitle("general", labels), "", "", "", "", "", getSectionTitle("general", labels)],
+      ...pairedRows(generalRows(userStats), generalRows(enemyStats)),
+      [],
+      [getSectionTitle("consolidated", labels), "", "", "", "", "", getSectionTitle("consolidated", labels)],
+      ...pairedRows(consolidatedRows(userStats), consolidatedRows(enemyStats)),
+      [],
+      [getSectionTitle("tactical", labels)],
+      [labels.tacticalReading, labels.offensive, labels.attackStat, labels.defensive, labels.defenseStat, labels.matchupForecast],
+      [labels.attackPhase, userName, userStats.attack, enemyName, enemyStats.defense, userStats.attack > enemyStats.defense ? labels.attackVictory : labels.attackDefeat],
+      [labels.defensePhase, userName, userStats.defense, enemyName, enemyStats.attack, userStats.defense > enemyStats.attack ? labels.defenseVictory : labels.defenseDefeat],
+    ];
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.aoa_to_sheet(rows);
+    worksheet["!cols"] = [
+      { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 3 },
+      { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 },
+    ];
+    worksheet["!merges"] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } },
+      { s: { r: 0, c: 6 }, e: { r: 0, c: 10 } },
+    ];
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Comparativa");
+    const file = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+    downloadFile("fomo-war-room.xlsx", file, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  };
+
+  const exportCsv = () => {
+    const tables = createExportTables();
+    const csv = exportSections
+      .flatMap((section) => [...tables[section], []])
+      .map((row) => row.map((cell) => {
+        const value = String(cell ?? "");
+        return `"${value.replaceAll('"', '""')}"`;
+      }).join(";"))
+      .join("\r\n");
+    downloadFile("fomo-war-room.csv", `\uFEFF${csv}`, "text/csv;charset=utf-8");
+  };
+
+  const importFile = async (file?: File) => {
+    if (!file) {
+      return;
+    }
+
+    try {
+      const XLSX = await import("xlsx");
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      const allRows = workbook.SheetNames.flatMap((sheetName) => [
+        ...XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[sheetName], { header: 1, raw: true }),
+        [],
+      ]);
+      const clanRows = getSectionRows(allRows, "clans");
+      const battleRows = getSectionRows(allRows, "battle");
+      const names = new Map<string, string>();
+      Object.values(translations).forEach((knownLabels) => {
+        names.set(knownLabels.yourClan, "user");
+        names.set(knownLabels.enemyClan, "enemy");
+      });
+
+      let importedUserName = "";
+      let importedEnemyName = "";
+      allRows.slice(0, 3).forEach((row) => {
+        for (let column = 0; column < row.length - 1; column += 1) {
+          if (names.get(cellText(row[column])) === "user") importedUserName ||= cellText(row[column + 1]);
+          if (names.get(cellText(row[column])) === "enemy") importedEnemyName ||= cellText(row[column + 1]);
+        }
+      });
+
+      if (!importedUserName || !importedEnemyName) {
+        clanRows.forEach((row) => {
+          if (names.get(cellText(row[0])) === "user") importedUserName ||= cellText(row[1]);
+          if (names.get(cellText(row[0])) === "enemy") importedEnemyName ||= cellText(row[1]);
+        });
+      }
+
+      const importedPlayers: Record<"user" | "enemy", Player[]> = { user: [], enemy: [] };
+      battleRows.forEach((row, index) => {
+        const sideColumns = [
+          { sideColumn: 0, powerColumn: 2 },
+          { sideColumn: 6, powerColumn: 8 },
+        ];
+        sideColumns.forEach(({ sideColumn, powerColumn }) => {
+          const side = names.get(cellText(row[sideColumn]));
+          if (side !== "user" && side !== "enemy") return;
+          const powerByRace = Object.fromEntries(races.map((race, raceIndex) => {
+            const value = row[raceIndex + powerColumn];
+            return [race, value === undefined || value === null || value === "" ? "" : cellText(value).replace(",", ".")];
+          })) as Record<Race, string>;
+          importedPlayers[side].push({ id: index + 1, powerByRace });
+        });
+      });
+
+      if (!importedUserName || !importedEnemyName || !importedPlayers.user.length || !importedPlayers.enemy.length) {
+        throw new Error("Missing clan or battle-order data");
+      }
+
+      setUserName(importedUserName);
+      setEnemyName(importedEnemyName);
+      setUserPlayers(importedPlayers.user);
+      setEnemyPlayers(importedPlayers.enemy);
+      setDataMessage(labels.importSuccess);
+    } catch {
+      setDataMessage(labels.importError);
+    }
+  };
+
   return (
     <main className="app-shell">
       <header className="topbar">
@@ -610,7 +888,23 @@ export default function Home() {
           <span>{labels.brand}</span>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <div className="topbar-tools">
+          <div className="data-actions" aria-label={labels.dataActions}>
+            <input
+              ref={importInputRef}
+              className="file-input-hidden"
+              type="file"
+              accept=".xls,.xlsx,.csv"
+              onChange={(event) => {
+                void importFile(event.target.files?.[0]);
+                event.target.value = "";
+              }}
+            />
+            <button className="data-action-button" type="button" onClick={() => importInputRef.current?.click()}>{labels.importData}</button>
+            <button className="data-action-button" type="button" onClick={() => void exportXls().catch(() => setDataMessage(labels.importError))}>{labels.exportXls}</button>
+            <button className="data-action-button" type="button" onClick={exportCsv}>{labels.exportCsv}</button>
+          </div>
+          {dataMessage && <span className="data-message" role="status">{dataMessage}</span>}
           <Link className="account-link" href="/cuenta">Mi cuenta</Link>
           <label htmlFor="language-select" style={{ fontSize: 12, letterSpacing: "0.08em", textTransform: "uppercase" }}>
             {labels.languageLabel}
