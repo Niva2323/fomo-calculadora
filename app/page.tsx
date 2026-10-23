@@ -372,7 +372,7 @@ function calculateStats(players: Player[]): ClanStats {
   const defense = (defenseTotal / 3) * 0.75 * 1.1436;
 
   return {
-    players: players.length,
+    players: Object.values(counts).reduce((total, count) => total + count, 0),
     power,
     strength: Math.round(power + 100 + players.length * 0.0333),
     counts,
@@ -470,7 +470,7 @@ function ClanPanel({
           aria-expanded={isBattleOrderOpen}
           aria-controls={`${eyebrow}-players`}
         >
-          <span><span className="table-kicker">{labels.battleOrder}</span><strong>{Object.values(stats.counts).reduce((total, count) => total + count, 0)} {labels.playersLabel}</strong></span>
+          <span><span className="table-kicker">{labels.battleOrder}</span><strong>{formatNumber(stats.players, 0, language)} {labels.playersLabel}</strong></span>
           <span className={`toggle-chevron ${isBattleOrderOpen ? "is-open" : ""}`} aria-hidden="true">⌄</span>
         </button>
         {isBattleOrderOpen && <button className="add-button" type="button" onClick={addPlayer}>+ {labels.addPlayer}</button>}
@@ -725,11 +725,11 @@ export default function Home() {
 
   const exportXls = async () => {
     const XLSX = await import("xlsx-js-style");
-    const pairedRows = (leftRows: ExportRows, rightRows: ExportRows) => {
+    const pairedRows = (leftRows: ExportRows, rightRows: ExportRows, rightStart: number) => {
       const rowCount = Math.max(leftRows.length, rightRows.length);
       return Array.from({ length: rowCount }, (_, index) => [
         ...(leftRows[index] ?? []),
-        ...Array.from({ length: 10 - (leftRows[index]?.length ?? 0) }, () => ""),
+        ...Array.from({ length: rightStart - (leftRows[index]?.length ?? 0) }, () => ""),
         ...(rightRows[index] ?? []),
       ]);
     };
@@ -792,21 +792,21 @@ export default function Home() {
       );
 
       columnHeaderRows.push(rows.length);
-      rows.push(...pairedRows(leftRows, rightRows));
+      rows.push(...pairedRows(leftRows, rightRows, rightStart));
       rows.push([]);
     };
-    const heading = Array.from({ length: 19 }, () => "");
+    const heading = Array.from({ length: 12 }, () => "");
     heading[0] = labels.offensive;
-    heading[10] = labels.defensive;
-    const clanNames = Array.from({ length: 19 }, () => "");
+    heading[7] = labels.defensive;
+    const clanNames = Array.from({ length: 12 }, () => "");
     clanNames[0] = labels.yourClan;
     clanNames[1] = userName;
-    clanNames[10] = labels.enemyClan;
-    clanNames[11] = enemyName;
+    clanNames[7] = labels.enemyClan;
+    clanNames[8] = enemyName;
     rows.push(heading, clanNames);
     mergeRanges.push(
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 8 } },
-      { s: { r: 0, c: 10 }, e: { r: 0, c: 18 } },
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } },
+      { s: { r: 0, c: 7 }, e: { r: 0, c: 11 } },
     );
 
     addPairedSection(
@@ -827,11 +827,11 @@ export default function Home() {
           ...races.map((race) => Number(player.powerByRace[race]) || 0),
         ]),
       ],
-      10,
-      9,
+      7,
+      5,
     );
-    addPairedSection(getSectionTitle("general", labels), generalRows(userStats), generalRows(enemyStats), 10, 9);
-    addPairedSection(getSectionTitle("consolidated", labels), consolidatedRows(userStats), consolidatedRows(enemyStats), 10, 9);
+    addPairedSection(getSectionTitle("general", labels), generalRows(userStats), generalRows(enemyStats), 7, 5);
+    addPairedSection(getSectionTitle("consolidated", labels), consolidatedRows(userStats), consolidatedRows(enemyStats), 7, 5);
 
     const tacticalTitleRow = rows.length;
     rows.push([getSectionTitle("tactical", labels)]);
@@ -845,8 +845,8 @@ export default function Home() {
 
     const workbook = XLSX.utils.book_new();
     const worksheet = XLSX.utils.aoa_to_sheet(rows);
-    worksheet["!cols"] = Array.from({ length: 19 }, (_, column) => ({
-      wch: column === 9 ? 3 : column === 0 || column === 10 ? 20 : column < 9 ? 13 : 14,
+    worksheet["!cols"] = Array.from({ length: 12 }, (_, column) => ({
+      wch: column === 0 || column === 7 ? 20 : 13,
     }));
     worksheet["!merges"] = mergeRanges;
     const colors = {
@@ -883,16 +883,16 @@ export default function Home() {
     };
     const valueStyle = (color: string) => ({ font: { color: { rgb: color }, bold: true } });
 
-    setRangeStyle(0, 0, 8, {
+    setRangeStyle(0, 0, 4, {
       fill: { patternType: "solid", fgColor: { rgb: colors.paper } },
       font: { bold: true, color: { rgb: colors.orange } },
     });
-    setRangeStyle(0, 10, 18, {
+    setRangeStyle(0, 7, 11, {
       fill: { patternType: "solid", fgColor: { rgb: colors.paper } },
       font: { bold: true, color: { rgb: colors.orange } },
     });
-    [0, 10].forEach((column) => setCellStyle(1, column, { font: { bold: true, color: { rgb: colors.ink } } }));
-    [1, 11].forEach((column) => setCellStyle(1, column, { font: { color: { rgb: colors.ink } } }));
+    [0, 7].forEach((column) => setCellStyle(1, column, { font: { bold: true, color: { rgb: colors.ink } } }));
+    [1, 8].forEach((column) => setCellStyle(1, column, { font: { color: { rgb: colors.ink } } }));
     sectionTitleRows.forEach(({ row, rightStart, width }) => {
       setRangeStyle(row, 0, width - 1, sectionStyle);
       setRangeStyle(row, rightStart, rightStart + width - 1, sectionStyle);
@@ -911,29 +911,29 @@ export default function Home() {
     const battleDataStart = columnHeaderRows[0] + 1;
     const battleDataEnd = battleDataStart + Math.max(userPlayers.length, enemyPlayers.length);
     for (let row = battleDataStart; row < battleDataEnd; row += 1) {
-      [2, 12].forEach((column) => setCellStyle(row, column, valueStyle(colors.red)));
-      [3, 13].forEach((column) => setCellStyle(row, column, valueStyle(colors.blue)));
-      [4, 14].forEach((column) => setCellStyle(row, column, valueStyle(colors.green)));
+      [2, 9].forEach((column) => setCellStyle(row, column, valueStyle(colors.red)));
+      [3, 10].forEach((column) => setCellStyle(row, column, valueStyle(colors.blue)));
+      [4, 11].forEach((column) => setCellStyle(row, column, valueStyle(colors.green)));
     }
 
     const generalHeaderRow = columnHeaderRows[1];
     const generalValueRow = generalHeaderRow + 1;
     const raceHeaderRow = generalHeaderRow + 2;
     const raceValueRow = generalHeaderRow + 3;
-    [1, 11].forEach((column) => setCellStyle(generalValueRow, column, valueStyle(colors.orange)));
-    [2, 12].forEach((column) => setCellStyle(generalValueRow, column, valueStyle(colors.red)));
-    [3, 13].forEach((column) => setCellStyle(generalValueRow, column, valueStyle(colors.blue)));
-    [4, 14].forEach((column) => setCellStyle(generalValueRow, column, valueStyle(colors.green)));
+    [1, 8].forEach((column) => setCellStyle(generalValueRow, column, valueStyle(colors.orange)));
+    [2, 9].forEach((column) => setCellStyle(generalValueRow, column, valueStyle(colors.red)));
+    [3, 10].forEach((column) => setCellStyle(generalValueRow, column, valueStyle(colors.blue)));
+    [4, 11].forEach((column) => setCellStyle(generalValueRow, column, valueStyle(colors.green)));
     setRangeStyle(raceHeaderRow, 1, 4, headerStyle);
-    setRangeStyle(raceHeaderRow, 11, 14, headerStyle);
-    [[1, colors.red], [2, colors.blue], [3, colors.green], [4, colors.orange], [11, colors.red], [12, colors.blue], [13, colors.green], [14, colors.orange]]
+    setRangeStyle(raceHeaderRow, 8, 11, headerStyle);
+    [[1, colors.red], [2, colors.blue], [3, colors.green], [4, colors.orange], [8, colors.red], [9, colors.blue], [10, colors.green], [11, colors.orange]]
       .forEach(([column, color]) => setCellStyle(raceValueRow, Number(column), valueStyle(String(color))));
 
     const consolidatedHeaderRow = columnHeaderRows[2];
     [consolidatedHeaderRow + 1, consolidatedHeaderRow + 2, consolidatedHeaderRow + 3].forEach((row, index) => {
       const raceColor = [colors.red, colors.blue, colors.green][index];
       setCellStyle(row, 0, valueStyle(raceColor));
-      setCellStyle(row, 10, valueStyle(raceColor));
+      setCellStyle(row, 7, valueStyle(raceColor));
     });
 
     rows.slice(tacticalTitleRow + 2).forEach((row, index) => {
